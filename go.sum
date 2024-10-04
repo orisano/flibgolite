@@ -30,6 +30,8 @@ github.com/orisano/gosax v0.0.0-20240923172425-d02080024669 h1:9biVHLq5iyfz2X+p0
 github.com/orisano/gosax v0.0.0-20240923172425-d02080024669/go.mod h1:mw6A5jIOFDeVOqffQkggKOOjRFevYnLyXgiZP06fRjI=
 github.com/orisano/gosax v0.0.0-20241004080528-c67bfda3fa54 h1:l9xXMDVf3TYytXSWUiVWyHDj+YTNlqGvTzWKJNal+TI=
 github.com/orisano/gosax v0.0.0-20241004080528-c67bfda3fa54/go.mod h1:mw6A5jIOFDeVOqffQkggKOOjRFevYnLyXgiZP06fRjI=
+github.com/orisano/gosax v0.0.0-20241004183648-544a00f0923e h1:i84sVJ5HDY/xKsU545h5QSd2Mj+QEenknfBnf/bEAJA=
+github.com/orisano/gosax v0.0.0-20241004183648-544a00f0923e/go.mod h1:mw6A5jIOFDeVOqffQkggKOOjRFevYnLyXgiZP06fRjI=
 github.com/pmezard/go-difflib v1.0.0 h1:4DBwDE0NGyQoBHbLQYPwSUPoCMWR5BEzIk/f1lZbAQM=
 github.com/pmezard/go-difflib v1.0.0/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
