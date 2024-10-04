@@ -33,16 +33,17 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	_ "image/gif"
+	_ "image/jpeg"
+	_ "image/png"
 	"io"
 	"os"
 	"path"
 	"strconv"
 	"strings"
+	"sync"
 
-	_ "image/gif"
-	_ "image/jpeg"
-	_ "image/png"
-
+	"github.com/orisano/gosax"
 	"github.com/vinser/flibgolite/pkg/model"
 	"github.com/vinser/u8xml"
 )
@@ -427,4 +428,234 @@ func GetCoverImage(stock string, book *model.Book) (image.Image, error) {
 		return nil, err
 	}
 	return img, nil
+}
+
+var bufPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, 64*1024)
+	},
+}
+
+func ParseFB2Gosax(rc io.ReadCloser) (*FB2, error) {
+	buf := bufPool.Get().([]byte)
+	defer bufPool.Put(buf)
+	d := gosax.NewReaderBuf(rc, buf)
+	d.EmitSelfClosingTag = true
+
+	fb := &FB2{}
+TokenLoop:
+	for {
+		tok, err := gosax.TokenE(d.Event())
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "FictionBook":
+			case "description":
+			case "title-info":
+				titleInfo, err := parseTitleInfoGosax(d)
+				if err == nil {
+					fb.Description.TitleInfo = titleInfo
+				}
+			case "publish-info":
+				publishInfo, err := parsePublishInfoGosax(d)
+				if err == nil {
+					fb.Description.PublishInfo = publishInfo
+				}
+			default:
+				_ = gosax.Skip(d)
+			}
+		case xml.EndElement:
+			switch t.Name.Local {
+			case "description":
+				break TokenLoop
+			}
+		}
+	}
+	return fb, nil
+}
+
+func parseTitleInfoGosax(d *gosax.Reader) (TitleInfo, error) {
+	titleInfo := TitleInfo{}
+	for {
+		tok, err := gosax.TokenE(d.Event())
+		if err != nil {
+			return titleInfo, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "author":
+				author, err := parseAuthorGosax(d)
+				if err == nil {
+					titleInfo.Authors = append(titleInfo.Authors, author)
+				}
+			case "book-title":
+				titleInfo.BookTitle = getValueGosax(d)
+			case "genre":
+				genre := getValueGosax(d)
+				if genre != "" {
+					titleInfo.Genres = append(titleInfo.Genres, genre)
+				}
+			case "annotation":
+				annotation, err := parseAnnotationGosax(d)
+				if err == nil {
+					titleInfo.Annotation = annotation
+				}
+			case "keywords":
+				titleInfo.Keywords = getValueGosax(d)
+			case "date":
+				titleInfo.Date = getValueGosax(d)
+			case "lang":
+				titleInfo.Lang = getValueGosax(d)
+			case "sequence":
+				serie, err := parseSerie(t)
+				if err == nil {
+					titleInfo.Series = append(titleInfo.Series, serie)
+				}
+			case "coverpage":
+				cover, err := parseCoverPageGosax(d)
+				if err == nil {
+					titleInfo.CoverPage = cover
+				}
+			default:
+				_ = gosax.Skip(d)
+			}
+		case xml.EndElement:
+			switch t.Name.Local {
+			case "title-info":
+				return titleInfo, nil
+			}
+		}
+	}
+}
+
+func parseAuthorGosax(d *gosax.Reader) (Author, error) {
+	author := Author{}
+	for {
+		tok, err := gosax.TokenE(d.Event())
+		if err != nil {
+			return author, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "first-name":
+				author.FirstName = getValueGosax(d)
+			case "middle-name":
+				author.MiddleName = getValueGosax(d)
+			case "last-name":
+				author.LastName = getValueGosax(d)
+			default:
+
+				_ = gosax.Skip(d)
+			}
+		case xml.EndElement:
+			switch t.Name.Local {
+			case "author":
+				return author, nil
+			}
+		}
+	}
+}
+
+func getValueGosax(d *gosax.Reader) string {
+	var data []byte
+	for {
+		tok, err := gosax.TokenE(d.Event())
+		if err != nil {
+			break
+		}
+		switch t := tok.(type) {
+		case xml.CharData:
+			data = append(data, t...)
+		case xml.EndElement:
+			return string(bytes.TrimSpace(data))
+		}
+	}
+	return ""
+}
+
+func parseAnnotationGosax(d *gosax.Reader) (Annotation, error) {
+	annotation := Annotation{}
+	for {
+		tok, err := gosax.TokenE(d.Event())
+		if err != nil {
+			return annotation, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "p":
+				p := getValueGosax(d)
+				if p != "" {
+					annotation.P = append(annotation.P, p)
+				}
+			default:
+				_ = gosax.Skip(d)
+			}
+		case xml.EndElement:
+			switch t.Name.Local {
+			case "annotation":
+				return annotation, nil
+			}
+		}
+	}
+}
+
+func parseCoverPageGosax(d *gosax.Reader) (CoverPage, error) {
+	coverPage := CoverPage{}
+	for {
+		tok, err := gosax.TokenE(d.Event())
+		if err != nil {
+			return coverPage, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			if t.Name.Local == "image" {
+				href := getAttr(t, "href")
+				if href != "" {
+					coverPage.Image.Href = href
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "coverpage" {
+				return coverPage, nil
+			}
+		}
+	}
+}
+
+func parsePublishInfoGosax(d *gosax.Reader) (PublishInfo, error) {
+	publishInfo := PublishInfo{}
+	for {
+		tok, err := gosax.TokenE(d.Event())
+		if err != nil {
+			return publishInfo, err
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "year":
+				publishInfo.Year, _ = strconv.Atoi(getValueGosax(d))
+			case "series":
+				serie, err := parseSerie(t)
+				if err == nil {
+					publishInfo.Series = append(publishInfo.Series, serie)
+				}
+			default:
+				_ = gosax.Skip(d)
+			}
+		case xml.EndElement:
+			switch t.Name.Local {
+			case "publish-info":
+				return publishInfo, nil
+			}
+		}
+	}
 }
